@@ -1,7 +1,7 @@
 //  Program to control my marshmallow roasting robot.  RF transmitter (see rhReliableXmit.ino for that code) used to 
 //  drive it and control the slide arm.
-// Transmitter right joystick - forward/backward/turn-left/turn-right/switch-for-headlights
-// Transmitter left joystick - slide-out/slide-back/slide-up/slide-down/switch-for-rotisserie
+// Transmitter right joystick - forward/backward/turn-left/turn-right/pushButton-for-headlights
+// Transmitter left joystick - slide-out/slide-back/slide-up/slide-down/pushButton-for-rotisserie
 //
 //  dlf 12/12/2024
 
@@ -11,7 +11,7 @@
 #include <RHReliableDatagram.h>
 #include <RH_NRF24.h>
 
-int DEBUG = 1;  // 1 for debug, 0 for quiet
+int DEBUG = 0;  // 1 for debug, 0 for quiet
 
 // Prototypes
 void go_Forward();  //Set direction to Forward
@@ -28,15 +28,16 @@ void right_back(); // right wheel backward turn
 void right_forward();  //right wheel forward turn
 void allStop();    //Stop the robot
 void set_MotorSpeed(int left,int right);
-void updateWheelCount();
+void updateSlidePulleyCount();
 void extendSlide(); 
 void retractSlide(); 
 void stopSlide();
 void raiseSlide(); 
 void lowerSlide(); 
+void homeTheSlide();
 void sendMessageToClient(char * messageBuffer);
-boolean checkSwitch(int pin);
-boolean checkSwitchA6A7(int pin, boolean noDebounceCheck);
+boolean checkSwitch(int pin, boolean doDebounceCheck);
+boolean checkSwitchA6A7(int pin, boolean doDebounceCheck);
 
 // For the nrf24 xmit/receive
 #define CLIENT_ADDRESS 1
@@ -74,9 +75,11 @@ boolean checkSwitchA6A7(int pin, boolean noDebounceCheck);
 
 // Globals
 int  SWITCH_PRESSED = 0;
+int  MAGNET_SENSED = 0;
 int RIGHT_MOTOR_SPEED_ADJ = -5;          // In case the left/right motors don't run the same speed (we are not using encoders... ran out of IO's!)
 int LEFT_MOTOR_SPEED_ADJ = 0;
 volatile int slideMotorCounter = 0;  // Keeps track of how far the slides have moved
+volatile boolean interruptSync = false; //Set true right after an interrupt, clear when incrementing/decrementing the slideMotorCounter.  
 int MAX_SLIDE_MOTOR_COUNT = 16;      // Slide extend limit.  Max number of half turns of the slide motor before stopping.
 int MIN_SLIDE_MOTOR_COUNT = 1;       // Slide retract limit.  Min number of half turns of the slide motor before stopping.
 
@@ -120,18 +123,54 @@ RHReliableDatagram manager(driver, SERVER_ADDRESS);
 
 
 //#######################################################
+//#######################################################
 // Functions
+//#######################################################
 //#######################################################
 
 //##################################################
 // Interrupt handler for the slide motor hall sensor
 //##################################################
-void updateWheelCount() {
+void updateSlidePulleyCount() {
    if(slideExtending) {
       slideMotorCounter++;  // Slide extending
    } else if(slideRetracting) {
       slideMotorCounter--;  // Slide extending
    }
+   interruptSync = true;  // Tells the main loop that an interrupt happened so we can stop the pulley synchronously
+}
+
+//###############################################################################
+// Retract the slide until we hit the limit switch, then reset the motor counter.
+//###############################################################################
+void homeTheSlide() {
+      // first extend the slide a tick in case it's sitting on the limit switch
+      interruptSync=false;
+      extendSlide();  // Get it moving
+      int curCount = slideMotorCounter;
+      while(slideMotorCounter <= curCount + 1) {
+      }
+      stopSlide();
+
+       // Move slides back to home
+      if(DEBUG) {
+         Serial.println(F("Moving slide to home position"));
+      }
+      retractSlide();
+
+      // Wait until the limit switch tripped
+      // No debounce.  Just want to see the first edge as quickly as possible.
+      while(checkSwitchA6A7(slideLimitSwitchPin,false) != SWITCH_PRESSED) {
+      }
+      if(DEBUG) {
+         Serial.println(F("Found limit switch"));
+      }
+      stopSlide();
+      slideMotorCounter = 0;
+
+      // Now advance slide to the minimum motor count position (we don't want the slide sitting at it's limit)
+      extendSlide();  // Get it moving
+      stopSlide();    // Stop at the next interrupt
 }
 
 //##############################
@@ -210,7 +249,6 @@ void left_stop() {
    digitalWrite(leftMotorDirPin1,LOW);
    digitalWrite(leftMotorDirPin2,LOW);
 }
-
 /*set motor speed-  This is what actually starts the motors moving */
 void set_MotorSpeed(int left,int right) {
    left += LEFT_MOTOR_SPEED_ADJ;
@@ -233,16 +271,34 @@ void retractSlide() {
    digitalWrite(slideMotorDirPin1 ,HIGH); 
    digitalWrite(slideMotorDirPin2 ,LOW);
 }
+
 void stopSlide() {
-   slideExtending = false;
-   slideRetracting = false;
+   // If the slide is moving wait for the next interrupt sync so we stop right when the hall-sensor detects a magnet.  
+   // That way we don't accumulate run-out error if the user bangs the stick back and forth between sensor ticks.
+   if(slideExtending || slideRetracting) {
+      interruptSync = false;
+      if(DEBUG) {
+         Serial.print(F(" Waiting for interrupt"));
+      }
+      while(!interruptSync) {
+      }
+      Serial.println("");
+   }
    digitalWrite(slideMotorDirPin1 ,LOW); 
    digitalWrite(slideMotorDirPin2 ,LOW);
+   if(DEBUG) {
+      Serial.print(F("SlideMotorCount: "));
+      Serial.println(slideMotorCounter);
+   }
+   slideExtending = false;
+   slideRetracting = false;
 }
+
 void raiseSlide() {
    digitalWrite(linearActuatorDirPin1 ,HIGH); 
    digitalWrite(linearActuatorDirPin2 ,LOW);
 }
+
 void lowerSlide() {
    digitalWrite(linearActuatorDirPin1 ,LOW);
    digitalWrite(linearActuatorDirPin2 ,HIGH); 
@@ -263,30 +319,34 @@ void sendMessageToClient(char * messageBuffer) {
 // #####################################################
 // Check the state of a switch after debouncing it
 // #####################################################
-boolean checkSwitch(int pin) {
+boolean checkSwitch(int pin, boolean doDebounceCheck) {
     boolean state;
     boolean prevState;
     int debounceDelay = 20;
     prevState = digitalRead(pin);
-    for(int counter=0; counter < debounceDelay; counter++) {
-        delay(1);
-        state = digitalRead(pin);
-        if(state != prevState) {
-            counter=0;
-            prevState=state;
-        }
-    }
-    // At this point the switch state is stable
-    if(state == HIGH) {
-        return true;
+    if(doDebounceCheck) {
+       for(int counter=0; counter < debounceDelay; counter++) {
+           delay(1);
+           state = digitalRead(pin);
+           if(state != prevState) {
+               counter=0;
+               prevState=state;
+           }
+       }
+       // At this point the switch state is stable
+       if(state == HIGH) {
+           return true;
+       } else {
+           return false;
+       }
     } else {
-        return false;
+      return(prevState);
     }
 }
 
 // Check switch that is connected to A6 or A7.  A6/A7 can only use analogRead so we have to determine if a 1 or 0 is being read.
-// noDelay switch for when we just want to do a raw read with no debounce (used when we only care about the triggering edge)
-boolean checkSwitchA6A7(int pin, boolean noDebounceCheck) {
+// doDebounceCheck switch set false when we just want to do a raw read with no debounce (used when we only care about the triggering edge)
+boolean checkSwitchA6A7(int pin, boolean doDebounceCheck) {
     int ain;
     boolean state;
     boolean prevState;
@@ -297,27 +357,28 @@ boolean checkSwitchA6A7(int pin, boolean noDebounceCheck) {
     } else {
        prevState = 0;
     }
-    if(noDebounceCheck) {
-      return(prevState);
-    }
-    for(int counter=0; counter < debounceDelay; counter++) {
-        delay(1);
-        ain=analogRead(pin);
-        if(ain > 512) {
-            state = 1;
-         } else {
-            state = 0;
-         }
-        if(state != prevState) {
-            counter=0;
-            prevState=state;
+    if(doDebounceCheck) {
+        for(int counter=0; counter < debounceDelay; counter++) {
+            delay(1);
+            ain=analogRead(pin);
+            if(ain > 512) {
+                state = 1;
+             } else {
+                state = 0;
+             }
+            if(state != prevState) {
+                counter=0;
+                prevState=state;
+            }
         }
-    }
-    // At this point the switch state is stable
-    if(state == HIGH) {
-        return true;
+        // At this point the switch state is stable
+        if(state == HIGH) {
+            return true;
+        } else {
+            return false;
+        }
     } else {
-        return false;
+      return(prevState);
     }
 }
 
@@ -372,31 +433,10 @@ void setup() {
    digitalWrite(rotatorDirPin1, LOW);  // Turn off the rotisserie
 
    // Register the slide motor hall sensor interrupt
-   attachInterrupt(digitalPinToInterrupt(slideMotorHallPin), updateWheelCount, FALLING);
-               
-   // Home the linear slide
-   if(checkSwitchA6A7(slideLimitSwitchPin,false) == SWITCH_PRESSED) {
-      if(DEBUG) {
-         Serial.println(F("Slide is in home position"));
-      }
-      slideMotorCounter = 0; 
-   } else {
-       //move slides back to home
-      if(DEBUG) {
-         Serial.println(F("Moving slide to home position"));
-      }
-      retractSlide();
+   attachInterrupt(digitalPinToInterrupt(slideMotorHallPin), updateSlidePulleyCount, FALLING);
 
-      // Wait until the limit switch tripped
-      // Don't worry about debounce.  Just want to see the first edge as quickly as possible.
-      while(checkSwitchA6A7(slideLimitSwitchPin,true) != SWITCH_PRESSED) {
-      }
-      if(DEBUG) {
-         Serial.println(F("Found limit switch"));
-      }
-      stopSlide();
-      slideMotorCounter = 0;
-   }
+   // Home the slide (resetting the motor counter to zero)
+   homeTheSlide();
 }
 
 // #####################################################
@@ -404,8 +444,22 @@ void setup() {
 // #####################################################
 void loop() {
 
-   // Check if the slides are moving, that they have not exceeded the travel limits
-   if((slideExtending && slideMotorCounter >= MAX_SLIDE_MOTOR_COUNT) || (slideRetracting && slideMotorCounter <= MIN_SLIDE_MOTOR_COUNT)) {
+   // Safety check.  Stop the slide if we ever hit the limit switch
+   if(checkSwitchA6A7(slideLimitSwitchPin,false) == SWITCH_PRESSED) {
+
+      // Immediately stop the motor
+      digitalWrite(slideMotorDirPin1 ,LOW); 
+      digitalWrite(slideMotorDirPin2 ,LOW);
+      slideMotorCounter = 0;
+      slideExtending = false;
+      slideRetracting = false;
+      if(DEBUG) {
+         Serial.println(F("Unexpectantly found limit switch, Re-homing slide"));
+      }
+      homeTheSlide();
+   }
+   // If the slides are moving check that they have not exceeded the travel limits
+   if((slideExtending && slideMotorCounter >= MAX_SLIDE_MOTOR_COUNT-1) || (slideRetracting && slideMotorCounter <= MIN_SLIDE_MOTOR_COUNT+1)) {
       if(DEBUG) {
          Serial.print(F("Slide Motor Limit Reached: "));
          Serial.println(slideMotorCounter);
@@ -584,7 +638,13 @@ void loop() {
                Serial.println(F("Extend slide"));
                //  sendMessageToClient("Extend slide");
             }
-            extendSlide();
+            if(slideMotorCounter < MAX_SLIDE_MOTOR_COUNT) {
+               extendSlide();
+            } else {
+               if(DEBUG) {
+                  Serial.println(F("Can't extend slide. Travel limit reached."));
+               }
+            }
 
             // Stick back,  retract the slide
          } else if(packet.joyY < packet.joyYCenter - margin) {
@@ -592,7 +652,13 @@ void loop() {
                Serial.println(F("Retract slide"));
                //  sendMessageToClient("Retract slide");
             }
-            retractSlide();
+            if(slideMotorCounter > MIN_SLIDE_MOTOR_COUNT) {
+               retractSlide();
+            } else {
+               if(DEBUG) {
+                  Serial.println(F("Can't retract slide. Travel limit reached."));
+               }
+            }
 
             // Stick left/right -  Raise/Lower the arm
          } else if(packet.joyX > packet.joyXCenter + margin) {
