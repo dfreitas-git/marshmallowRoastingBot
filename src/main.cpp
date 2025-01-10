@@ -1,7 +1,7 @@
 //  Program to control my marshmallow roasting robot.  RF transmitter (see rhReliableXmit.ino for that code) used to 
 //  drive it and control the slide arm.
-// Transmitter right joystick - forward/backward/turn-left/turn-right/pushButton-for-headlights
-// Transmitter left joystick - slide-out/slide-back/slide-up/slide-down/pushButton-for-rotisserie
+// Transmitter right joystick - forward/backward/turn-left/turn-right.   Joystick pushButton-for-headlights on/off
+// Transmitter left joystick - slide-out/slide-back/slide-up/slide-down.  Joystick pushButton-for-rotisserie on/off
 //
 //  dlf 12/12/2024
 
@@ -66,8 +66,8 @@ boolean checkSwitchA6A7(int pin, boolean doDebounceCheck);
 #define linearActuatorDirPin1 3  // The linear actuator that raises/lowers the arm
 #define linearActuatorDirPin2 4 
 
-#define FULL_SPEED   255   //Full speed (255)
-#define HALF_SPEED   153   //Half speed 
+#define FULL_SPEED   255   //Full speed
+#define HALF_SPEED   127   //Half speed 
 
 // Joystick constants
 #define JOY_MARGIN 20   // Don't respond to joystick unless it is moved this much (count is the 0-1023 AtoD range)
@@ -114,7 +114,6 @@ uint8_t messageBuffer[24];  // Character buffer for text sent back to us
 // Instantiate Objects
 // ####################
 
-
 // Radio module
 RH_NRF24 driver(A0,A1);  // A0 is CE,  A1 is CSN
 
@@ -145,6 +144,9 @@ void updateSlidePulleyCount() {
 //###############################################################################
 void homeTheSlide() {
       // first extend the slide a tick in case it's sitting on the limit switch
+      // NOTE: Need to be sure the slide is not fully extended -  Otherwise this will jam it against the end stop.
+      // I currently have no way of telling that the slide is fully extended during power-up... A limit switch
+      // would melt over the campfire!
       interruptSync=false;
       extendSlide();  // Get it moving
       int curCount = slideMotorCounter;
@@ -168,7 +170,7 @@ void homeTheSlide() {
       stopSlide();
       slideMotorCounter = 0;
 
-      // Now advance slide to the minimum motor count position (we don't want the slide sitting at it's limit)
+      // Now advance slide to the minimum motor count position (we don't want the slide sitting at it's lower limit)
       extendSlide();  // Get it moving
       stopSlide();    // Stop at the next interrupt
 }
@@ -417,7 +419,7 @@ void setup() {
    if (!driver.setChannel(radioChannel)) {
       Serial.println(F("setChannel failed"));
    }
-   // This turn down the datarate to 1Mbps, and lowers the power to -12dB to try to get let radio noisem
+   // This turn down the datarate to 1Mbps, and lowers the power to -12dB to to minimize radio noise issues
    if (!driver.setRF(RH_NRF24::DataRate1Mbps, RH_NRF24::TransmitPowerm12dBm)){
       if(DEBUG) {
          Serial.println(F("setRF failed"));
