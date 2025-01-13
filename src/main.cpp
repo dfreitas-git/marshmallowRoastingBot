@@ -76,8 +76,8 @@ boolean checkSwitchA6A7(int pin, boolean doDebounceCheck);
 // Globals
 int  SWITCH_PRESSED = 0;
 int  MAGNET_SENSED = 0;
-int RIGHT_MOTOR_SPEED_ADJ = -5;          // In case the left/right motors don't run the same speed (we are not using encoders... ran out of IO's!)
-int LEFT_MOTOR_SPEED_ADJ = 0;
+int RIGHT_MOTOR_SPEED_ADJ = 0;          // In case the left/right motors don't run the same speed (we are not using encoders... ran out of IO's!)
+int LEFT_MOTOR_SPEED_ADJ = -7;
 volatile int slideMotorCounter = 0;  // Keeps track of how far the slides have moved
 volatile boolean interruptSync = false; //Set true right after an interrupt, clear when incrementing/decrementing the slideMotorCounter.  
 int MAX_SLIDE_MOTOR_COUNT = 16;      // Slide extend limit.  Max number of half turns of the slide motor before stopping.
