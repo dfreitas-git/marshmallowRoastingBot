@@ -16,7 +16,7 @@ dlf  12/12/2024
 
 
 ### Build Pictures
-![Alt text](./DemoVid.mov "Demo Video")
+![Demo Video](./DemoVid.mov "Demo Video")
 ![Alt text](./Robot1.jpg "Ready to Roast")
 ![Alt text](./Robot2.jpg "Slide Mechanics")
 ![Alt text](./Robot5.jpg "Slide Mechanics")
