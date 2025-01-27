@@ -13,6 +13,7 @@ dlf  12/12/2024
 ### Schematics
 ![Alt text](./Schematic_Sheet1.png "Marshmallow Roasting Robot")
 ![Alt text](./Schematic_Sheet2.png "Transmitter")
+![Alt text](./HallSensor.png "Hall Effect Sensor")
 
 
 ### Build Pictures
