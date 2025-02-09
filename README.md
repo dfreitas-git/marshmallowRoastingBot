@@ -1,6 +1,7 @@
 ### marshmallowRoastingBot
 * Arduino Nano based code for controlling a marshmallow roasting tank platform
 * Controlled with homebrewed Arduino/NRF24L01 transmitter
+* ESP32-CAM module added for first-person view of the action.
 * All metal roasting arm for reaching into campfile without (hopefully) melting...
 * Roasting arm has elevation and extend/retract control
 * Rotisseire motor for evenly roasted marshmallow!
