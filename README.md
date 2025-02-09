@@ -23,7 +23,6 @@ dlf  12/12/2024
 ![Alt text](./Robot1.jpg "Ready to Roast")
 ![Alt text](./Robot2.jpg "Slide Mechanics")
 ![Alt text](./Robot5.jpg "Slide Mechanics")
-![Alt text](./Robot3.jpg "Slide Mechanics")
 ![Alt text](./Robot4.jpg "Slide Mechanics")
 ![Alt text](./Transmitter.jpg "Transmitter")
 
