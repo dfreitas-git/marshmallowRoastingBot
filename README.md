@@ -10,6 +10,8 @@
 
 dlf  12/12/2024
 
+### Here is a design review for the project: ![Design Review](./DesignReview.pdf "Design Review")
+### Here is a breakdown of the costs: ![Tank Costs](./TankCosts.pdf "Tank Costs")
 
 ### Schematics
 ![Alt text](./Schematic_Sheet1.png "Marshmallow Roasting Robot")
@@ -26,6 +28,3 @@ dlf  12/12/2024
 ![Alt text](./Robot4.jpg "Slide Mechanics")
 ![Alt text](./Transmitter.jpg "Transmitter")
 
-
-![Design Review](./DesignReview.pdf "Design Review")
-![Tank Costs](./TankCosts.pdf "Tank Costs")
