@@ -26,3 +26,6 @@ dlf  12/12/2024
 ![Alt text](./Robot4.jpg "Slide Mechanics")
 ![Alt text](./Transmitter.jpg "Transmitter")
 
+
+![Design Review](./DesignReview.pdf "Design Review")
+![Tank Costs](./TankCosts.pdf "Tank Costs")
